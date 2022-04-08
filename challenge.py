@@ -1,5 +1,7 @@
 # import and initialization
 import os
+
+from numpy import full
 os.environ['PYSPARK_SUBMIT_ARGS'] = '--master local[7]  --packages graphframes:graphframes:0.8.2-spark3.1-s_2.12  pyspark-shell'
 
 import findspark
@@ -40,11 +42,11 @@ articles_graph = graphframes.GraphFrame(v ,e)
 
 def in_degrees_feature(edges, in_degrees):
 
-    return edges.join(in_degrees, edges.target == in_degrees.id).drop(in_degrees.id)
+    return edges.join(in_degrees, edges.dst == in_degrees.id).drop(in_degrees.id)
 
 
 
-# FEATURE 2 : Graphe d'auteurs
+# AUTHORS GRAPH
 def explode_authors(row):
     my_input=row.asDict()
 
@@ -56,26 +58,48 @@ def explode_authors(row):
             ret = {}
             ret['src'] = str(author).strip()
             ret['dst'] = str(cited).strip()
-            newRow = Row(*ret.keys()) #a. the Row object specification (column names)
+            newRow = pyspark.Row(*ret.keys()) #a. the Row object specification (column names)
             newRow = newRow(*ret.values())#b. the corresponding column values
 
             my_output.append(newRow)
     return my_output
 
-def get_authors(edges, nodes):
-    
-    edges_authors_src = edges.join(nodes, edges.source == nodes.id)
-    edges_authors_dst = edges_authors_src.join(nodes, edges.target == nodes.id)
 
-    return edges_authors_dst
+def get_authors_graph(edges):
+
+    author_edges = ss.sql("select A.authors author, B.authors cited, edges.cites \
+        from edges inner join nodes A on edges.target = A.id \
+                    inner join nodes B on edges.source = B.id \
+        where edges.cites = 1 and A.authors is not null and B.authors is not null")
+
+    author_edges = author_edges.rdd.flatMap(explode_authors).toDF()
+    author_edges.createOrReplaceTempView("author_edges")
+
+    author_edges = ss.sql("select src, dst, count(*) as nb from author_edges group by src, dst")
+
+    return author_edges
+
+
+
+def get_full_data():
+
+    full_data = ss.sql(
+        """
+        SELECT edges.source src, edges.target dst, A.year year_src, B.year year_dst, 
+            A.topics topics_src, B.topics topics_dst, A.authors authors_src, B.authors authors_dst, A.text text_src, B.text text_dst 
+        FROM edges INNER JOIN nodes A ON edges.source = A.id INNER JOIN nodes B ON edges.target=B.id
+        WHERE edges.cites = 1 AND A.authors is not null AND B.authors is not null"""
+    )
+
+    return full_data
+
 
 
 # PIPELINE
 
 in_degrees = articles_graph.inDegrees
-data = in_degrees_feature(df_edges, in_degrees)
-# data.show()
 
-data = get_authors(data, df_nodes)
+data = get_full_data()
+data = in_degrees_feature(data, in_degrees)
+
 data.show()
-
