@@ -15,11 +15,11 @@ sc = ss.sparkContext
 
 
 # loading data
-dft = ss.read.csv("node_information.csv")
+dft = ss.read.csv("data/node_information.csv")
 df_nodes = dft.toDF("id", "year", "topics", "authors", "temp1", "text")
 df_nodes.createOrReplaceTempView("nodes")
 
-dft = ss.read.option("delimiter", " ").csv("training_set.txt")
+dft = ss.read.option("delimiter", " ").csv("data/training_set.txt")
 df_edges = dft.toDF("source", "target", "cites")
 df_edges.createOrReplaceTempView("edges") 
 
