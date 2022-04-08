@@ -1,4 +1,5 @@
 # import and initialization
+import imp
 import os
 
 from numpy import full
@@ -9,6 +10,7 @@ findspark.init()
 
 import pyspark
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import split, explode, col, lit, concat_ws
 
 import graphframes
 
@@ -81,25 +83,54 @@ def get_authors_graph(edges):
 
 
 
-def get_full_data():
+def get_authors_data():
 
     full_data = ss.sql(
         """
-        SELECT edges.source src, edges.target dst, A.year year_src, B.year year_dst, 
-            A.topics topics_src, B.topics topics_dst, A.authors authors_src, B.authors authors_dst, A.text text_src, B.text text_dst 
+        SELECT edges.source src, edges.target dst,
+            A.authors authors_src_, B.authors authors_dst_
         FROM edges INNER JOIN nodes A ON edges.source = A.id INNER JOIN nodes B ON edges.target=B.id
         WHERE edges.cites = 1 AND A.authors is not null AND B.authors is not null"""
     )
 
     return full_data
 
+def make_authors_pairs(data):
+    
+    exploded_data_src = data.select(
+        data.src,
+        data.dst,
+        explode(split(data.authors_src_, ",")).alias("author_src"),
+        data.authors_dst_,
+    )
 
+    exploded_data_dst = exploded_data_src.select(
+        exploded_data_src.src,
+        exploded_data_src.dst,
+        exploded_data_src.author_src,
+        explode(split(exploded_data_src.authors_dst_, ",")).alias("author_dst"),
+    )
+
+    return exploded_data_dst
+
+# def get_text_data(data):
+    # return data.join
 
 # PIPELINE
 
 in_degrees = articles_graph.inDegrees
 
-data = get_full_data()
-data = in_degrees_feature(data, in_degrees)
+data = get_authors_data()
+data = make_authors_pairs(data)
+
+# at this point, we have a dataframe with pairs of authors
+# we have to make a join to get back the weight of their respectives edges and the group by to get the sum
+
+# data = join_and_group_by(data)
+
+# data = in_degrees_feature(data, in_degrees)
+# data = get_text_data(data)
+
+# le reste des features + un beau pipeline tout neuf
 
 data.show()
