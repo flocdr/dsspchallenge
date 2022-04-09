@@ -1,16 +1,17 @@
+# -*- coding: utf-8 -*-
 # import and initialization
-import imp
-import os
+import numpy as np
+# import os
 
-from numpy import full
-os.environ['PYSPARK_SUBMIT_ARGS'] = '--master local[7]  --packages graphframes:graphframes:0.8.2-spark3.1-s_2.12  pyspark-shell'
+# os.environ['PYSPARK_SUBMIT_ARGS'] = '--master local[7]  --packages graphframes:graphframes:0.8.2-spark3.1-s_2.12  pyspark-shell'
 
-import findspark
-findspark.init()
+# import findspark
+# findspark.init()
 
 import pyspark
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import split, explode, col, lit, concat_ws
+from pyspark.sql.types import FloatType
 
 import graphframes
 
@@ -35,12 +36,12 @@ v=df_edges.rdd.flatMap(lambda x:[[x['source']],[x['target']]]).toDF(["id"]).dist
 e=df_edges.select( col("source").alias("src"),col("target").alias("dst"))
 
 
-# création du graphe des articles
+# creation du graphe des articles
 articles_graph = graphframes.GraphFrame(v ,e)
 # articles_graph.vertices.show()
 
 
-# FEATURE #1 : degrés entrants
+# FEATURE #1 : degres entrants
 
 def in_degrees_feature(edges, in_degrees):
 
@@ -115,6 +116,35 @@ def make_authors_pairs(data):
 
 # def get_text_data(data):
     # return data.join
+
+#TD-IDF COMPUTATION
+def compute_tfidf(df_nodes):
+    #1. split text field into words (Tokenize)
+    tokenizer = Tokenizer(inputCol="topics", outputCol="words_topics")
+    df_nodes = tokenizer.transform(df_nodes)
+
+    #2. compute term frequencies
+    hashingTF = HashingTF(inputCol="words_topics", outputCol="tf_topics")
+    df_nodes = hashingTF.transform(df_nodes)
+
+
+    #3. IDF computation
+    idf = IDF(inputCol="tf_topics", outputCol="tf_idf_topics")
+    idfModel = idf.fit(df_nodes) #model that contains "dictionary" and IDF values
+    df_nodes = idfModel.transform(df_nodes)
+
+    return df_nodes
+
+# COSINE SIMILARITY
+def cos_sim(vec1, vec2):
+    if (np.linalg.norm(vec1) * np.linalg.norm(vec2)) !=0:
+        dot_value = np.dot(vec1, vec2) / (np.linalg.norm(vec1)*np.linalg.norm(vec2))
+        return dot_value.tolist()
+
+cos_sim_udf = udf(cos_sim, FloatType())
+
+
+
 
 # PIPELINE
 
